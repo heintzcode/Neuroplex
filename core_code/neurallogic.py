@@ -1,21 +1,19 @@
 from utils import *
-import keras
-from keras.models import Sequential
-from keras.layers import Conv2D, MaxPooling2D, LSTM, Dense, Dropout, Flatten
-from keras.layers.core import Permute, Reshape
-from keras.callbacks import EarlyStopping
-from keras.callbacks import ModelCheckpoint
-from keras import backend as K
-from keras import optimizers
+from data_gen_digits import create_digit_data
+# from keras.models import Sequential
+# from keras.layers import LSTM, Dense 
+# from keras.callbacks import EarlyStopping
+# from keras.callbacks import ModelCheckpoint
+import tensorflow as tf
 import os
 import itertools
+import re
 
-
-def train_neurallogic_model(model_name,
-                            num_event_type, num_attribute,
-                            ce_fsm_list, ce_time_list,
+def train_neurallogic_model(save_path,
+                            num_event_type, 
+                            ce_fsm_list, 
                             window_size,
-                            event_num ,
+                            num_samples ,
                             verify_logic,
                             diagnose = False):
     """
@@ -26,11 +24,9 @@ def train_neurallogic_model(model_name,
     The inputs:
     model_name: name of the NeuralLogic model to be trained.
     num_event_type: num of unique events
-    num_attribute: number of event attributes, usually 1. SID
     ce_fsm_list:  The pattern of events in CE. This is a list of lists. Each sub-list store the pattern of a CE
-    ce_time_list: The temporal constraints of CE. Only gives the min/max time interval between two consecutive events.
     window_size: the size of detection window in Neural Logic
-    event_num: total num of events data generated randomly
+    num_samples: total num of events data generated randomly
     stop_condition: when training stops (both MSE and MAE < then this threshold)
     
     First check if the NeuralLogic model exists:
@@ -39,35 +35,44 @@ def train_neurallogic_model(model_name,
     
     """
     ############## Check if the required NL model exist in saved_model dir ##############
-    if (model_name+'.hdf5') in os.listdir('saved_model'):
-        print('NeuralLogic model exists in: ',  'saved_model/'+ model_name+'.hdf5')
+    if os.path.exists(save_path):
+        print("Load existing neural logic model")
         return
     else:
-        print('No existing model found, start training....')
+        print('No existing neural logic model found, start training....')
     
 
     ############## generate data samples (contain CE) and label them ##############
-    data_feature, data_label = data_generator(num_event_type, num_attribute, 
-                                               ce_fsm_list, ce_time_list,
-                                               event_num, window_size )
+    # data_feature, data_label = data_generator(num_event_type, num_attribute, 
+    #                                            ce_fsm_list, ce_time_list,
+    #                                            num_samples, window_size )
 
-    data_feature = data_feature[:, :, 0:num_event_type] ## only look at the pattern, (ignore timestamp and attributes)
-    print(data_feature.shape)
+    # data_feature = data_feature[:, :, 0:num_event_type] ## only look at the pattern, (ignore timestamp and attributes)
+    # print(data_feature.shape)
+
+    ce_regexes = []
+    ce_names = []
+    for fsmspec in ce_fsm_list:
+        name = "".join([str(i) for i in fsmspec])
+        ce_regexes.append(re.compile(name))
+        ce_names.append(name)
+       
+    randdata_features, randdata_labels, _ = create_digit_data(num_samples, window_size, ce_regexes)
 
     # visualization of data class distribution
-    data_class_distribution(data_label, y_lim = event_num)
-
+    
+    data_class_distribution(randdata_labels, ce_names)
 
     # split for training and testing    ---# no validation here 
     # TRAIN - TEST
     p_train = 0.8
-    rnd_indices = np.random.rand(data_label.shape[0]) < p_train
+    rnd_indices = np.random.rand(randdata_labels.shape[0]) < p_train
 
-    train_data = data_feature[rnd_indices]
-    train_label = data_label[rnd_indices]
+    train_data = randdata_features[rnd_indices]
+    train_label = randdata_labels[rnd_indices]
 
-    test_data = data_feature[~rnd_indices]
-    test_label = data_label[~rnd_indices]
+    test_data = randdata_features[~rnd_indices]
+    test_label = randdata_labels[~rnd_indices]
 
     print(train_data.shape, train_label.shape)
     print(test_data.shape, test_label.shape)
@@ -85,14 +90,14 @@ def train_neurallogic_model(model_name,
     num_classes = num_ce
 
     print('building the model ... ')
-    model = Sequential()
-    model.add(LSTM(num_hidden_lstm, 
+    model = tf.keras.models.Sequential()
+    model.add(tf.keras.layers.LSTM(num_hidden_lstm, 
                input_shape=(win_len,dim), 
                return_sequences=False))
     # model.add(Dropout(0.5))
     # model.add(LSTM(32, return_sequences=False))
     # model.add(Dropout(0.5))
-    model.add(Dense(num_classes, activation='linear') ) 
+    model.add(tf.keras.layers.Dense(num_classes, activation='linear') ) 
     model.summary()
 
 
@@ -100,8 +105,8 @@ def train_neurallogic_model(model_name,
     epochs = 1000
     batch_size = 128
 
-    sgd = optimizers.SGD(lr=0.01)
-    adam = optimizers.Adam(lr=0.001)
+    #sgd = tf.keras.optimizers.SGD(learning_rate=0.01)
+    adam = tf.keras.optimizers.Adam(learning_rate=0.001)
 #     sgd = optimizers.SGD(lr=0.01, decay=1e-5, momentum=0.9, nesterov=True)
 #     adam = optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=1e-5, amsgrad=False)
 
@@ -111,9 +116,8 @@ def train_neurallogic_model(model_name,
 
 
     ############## training ##############   
-    save_path = 'saved_model/'+ model_name+'.hdf5'
-    es = EarlyStopping(monitor='val_MAE', mode='min', verbose=1, patience=20)
-    mc = ModelCheckpoint(save_path, monitor='val_MAE', mode='min', verbose=diagnose, save_best_only=True)
+    es = tf.keras.callbacks.EarlyStopping(monitor='val_MAE', mode='min', verbose=1, patience=20)
+    mc = tf.keras.callbacks.ModelCheckpoint(save_path, monitor='val_MAE', mode='min', verbose=diagnose, save_best_only=True)
     cb_list = [es, mc]
     
     print('============ Start NL Model Training ===========\n')
@@ -121,7 +125,7 @@ def train_neurallogic_model(model_name,
     H = model.fit(train_data, train_label,
                 batch_size=batch_size,
                 epochs=epochs,
-                verbose=0,
+                verbose=1,
                 shuffle=True,
                 callbacks = cb_list,
                 validation_data=(test_data, test_label))

@@ -223,11 +223,11 @@ def data_generator(num_event_type, num_attribute,
     """
     
     # ################### Checking consistency of inputs ###################
-    if set( [item for sublist in ce_fsm_list for item in sublist] ).issubset(set(range(1, num_event_type+1)) ):
+    if set( [item for sublist in ce_fsm_list for item in sublist] ).issubset(set(range(0, num_event_type)) ):
         pass
     else:
         raise ValueError('Events in CE def: ', set( [item for sublist in ce_fsm_list for item in sublist] ), 
-                         ' is beyond the space of all events: ', set(range(1, num_event_type+1)) )
+                         ' is beyond the space of all events: ', set(range(0, num_event_type)) )
     print('Inputs consistency checked. ')
     
     # ################### Generating event data ###################
@@ -318,7 +318,7 @@ def mnist_data_generator(num_event_type, num_attribute,
             mnist_data_event[i,j,:,:] = rand_img
         
         remaining_time = (time.time()-start_time)*( (data_event_label.shape[0] -(i+1))/(i+1) )
-        print('Generating data: %d - %d%% \t Remaining time: %d sec) '\
+        print('Selecting image data: %d - %d%% \t Remaining time: %d sec) '\
               % (i+1, (100*(i+1))//data_event_label.shape[0], remaining_time), 
               end='\r' if i<data_event_label.shape[0]-1 else '')
     print('\n MNIST events data generated!') 
@@ -358,44 +358,54 @@ def random_select_row(A):
 
 
 
-def data_class_distribution(data_label, y_lim = 5000):
+def data_class_distribution(label_counts, label_names):
     """
     Plot the class distribution of data for each CE
     Input:
     - data_label: n x num_ce array
     - y_lim: range of y axis
     """
-    
-    if data_label.ndim == 1:
-        data_label_i = data_label[:,]
-        bin_count = np.bincount(data_label_i.astype(int))
-        all_value = np.arange(len(bin_count) )
-        
-        fig = plt.figure(figsize=(8,2))
-        plt.title("CE # 1.")
-        plt.xlabel('Num of CE')
-        plt.ylabel('Count')
-        plt.ylim(0, y_lim)
-        plt.bar(all_value, bin_count,  align='center', alpha=0.5)
-        plt.show()
-        valid_sample_r = sum(data_label_i != 0)/data_label_i.shape
-        print('%.3f valid samples in generated data.'%valid_sample_r)
-        
-    else:
-        for i in range(data_label.shape[1]):
-            data_label_i = data_label[:,i]
-            bin_count = np.bincount(data_label_i.astype(int))
-            all_value = np.arange(len(bin_count) )
+    hits_per_event = [sum([label_count[j] for label_count in label_counts]) for j in range(len(label_names))]
+    fig = plt.figure()
+    plt.bar(label_names, hits_per_event)
+    plt.title("Distribution of Complex Events")
+    plt.show()
 
-            fig = plt.figure(figsize=(8,2))
-            plt.title("CE # %d"%i)
-            plt.xlabel('Num of CE')
-            plt.ylabel('Count')
-            plt.ylim(0, y_lim)
-            plt.bar(all_value, bin_count,  align='center', alpha=0.5)
-            plt.show()
-            valid_sample_r = sum(data_label_i != 0)/data_label_i.shape
-            print('%.3f valid samples in generated data.'%valid_sample_r)
+    hits_per_window = [sum(lc) for lc in label_counts]
+    plt.hist(hits_per_window)
+    plt.title("Number of Complex Events Found Per Window")
+    plt.show()
+
+    # if data_label.ndim == 1:
+    #     data_label_i = data_label[:,]
+    #     bin_count = np.bincount(data_label_i.astype(int))
+    #     all_value = np.arange(len(bin_count) )
+        
+    #     fig = plt.figure(figsize=(8,2))
+    #     plt.title("CE # 1.")
+    #     plt.xlabel('Num of CE')
+    #     plt.ylabel('Count')
+    #     plt.ylim(0, y_lim)
+    #     plt.bar(all_value, bin_count,  align='center', alpha=0.5)
+    #     plt.show()
+    #     valid_sample_r = sum(data_label_i != 0)/data_label_i.shape
+    #     print('%.3f valid samples in generated data.'%valid_sample_r)
+        
+    # else:
+    #     for i in range(data_label.shape[1]):
+    #         data_label_i = data_label[:,i]
+    #         bin_count = np.bincount(data_label_i.astype(int))
+    #         all_value = np.arange(len(bin_count) )
+
+    #         fig = plt.figure(figsize=(8,2))
+    #         plt.title("CE # %d"%i)
+    #         plt.xlabel('Num of CE')
+    #         plt.ylabel('Count')
+    #         plt.ylim(0, y_lim)
+    #         plt.bar(all_value, bin_count,  align='center', alpha=0.5)
+    #         plt.show()
+    #         valid_sample_r = sum(data_label_i != 0)/data_label_i.shape
+    #         print('%.3f valid samples in generated data.'%valid_sample_r)
         
         
         

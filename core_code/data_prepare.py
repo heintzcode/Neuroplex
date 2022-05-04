@@ -1,9 +1,19 @@
 import os
-from keras.datasets import mnist
-from keras.utils import np_utils
+import tensorflow as tf
+# from keras.datasets import mnist
+# from keras.utils import np_utils
 from utils import *
 
-
+def modify_mnist_data(mnist_test_features, mnist_test_labels, num_unique_labels):
+    """
+    Simplification of "generate customized mnist data" since we've already loaded it in
+    Add an extra dimension to the features (not sure why)
+    Convert the labels from integers to categorical / one-hot
+    """
+    mnist_test_features = np.expand_dims(mnist_test_features, axis=3)
+    mnist_test_labels = tf.keras.utils.to_categorical(mnist_test_labels, num_unique_labels)
+    return mnist_test_features, mnist_test_labels
+    
 def generate_customized_mnist_data(mnist_label, 
                           num_event_type):
     """
@@ -19,7 +29,7 @@ def generate_customized_mnist_data(mnist_label,
     """
 
     # loading MNIST dataset
-    (x_train, y_train), (x_test, y_test) = mnist.load_data()
+    (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
     x_train = x_train.astype('float32')
     x_test = x_test.astype('float32')
     # Normalizing the RGB codes by dividing it to the max RGB value.
@@ -41,7 +51,7 @@ def generate_customized_mnist_data(mnist_label,
     mnist_y_test =  y_test[testing_ind,]
 
     mnist_x_test = np.expand_dims(mnist_x_test, axis=3)
-    mnist_y_test = np_utils.to_categorical(mnist_y_test, num_event_type)
+    mnist_y_test = tf.keras.utils.to_categorical(mnist_y_test, num_event_type)
 
     print('Testing mnist feature shape: ',mnist_x_test.shape)
     print('Testing mnist label shape: ', mnist_y_test.shape)  
@@ -49,15 +59,15 @@ def generate_customized_mnist_data(mnist_label,
 
 
 
-def generate_mnist_event_data(num_event_type, num_attribute, 
-                              ce_fsm_list, ce_time_list,
+def generate_mnist_event_data(num_event_type, num_attributes,
+                              ce_fsm_list, ce_timing_list,
                               event_num, window_size,
                               mnist_data_event_path):
     """
     generate the windowed event data with CE in it. Each event is a mnist image.
     input:
-    num_event_type, num_attribute
-    ce_fsm_list, ce_time_list
+    num_event_type, 
+    ce_fsm_list, 
     mnist_event_num (how many mnist event randomly generated), window_size
     
     output:
@@ -85,15 +95,16 @@ def generate_mnist_event_data(num_event_type, num_attribute,
     x_train /= 255
     x_test /= 255
 
-    mnist_data_event, data_feature, data_label = mnist_data_generator(num_event_type, num_attribute, 
-                                                                       ce_fsm_list, ce_time_list,
+    mnist_data_event, data_feature, data_label = mnist_data_generator(num_event_type, num_attributes, 
+                                                                       ce_fsm_list, ce_timing_list,
                                                                        event_num, window_size, 
                                                                        x_train, y_train)
+
     # abandon the last several column features (attributes, timestamps)
     data_feature = data_feature[:, :, 0:num_event_type]
     
     # visualization
-    data_class_distribution(data_label, y_lim = event_num)
+    # data_class_distribution(data_label, y_lim = event_num)
     
     # changing the shape of mnist_data_event
     mnist_data_event = np.expand_dims(mnist_data_event, axis=4)  # expand dim of mnist with a 3rd channel
@@ -104,9 +115,9 @@ def generate_mnist_event_data(num_event_type, num_attribute,
     print('Dim of event label data: ',data_feature.shape)
     print('Dim of MNIST event label: ',data_label.shape)
     
-    save_path = 'data/'+ mnist_data_event_path
-    np.savez(save_path ,mnist_data_event = mnist_data_event,data_feature = data_feature, data_label = data_label )
-    print('Saved data file to: '+ save_path)
+    # save_path = 'data/'+ mnist_data_event_path
+    # np.savez(save_path ,mnist_data_event = mnist_data_event,data_feature = data_feature, data_label = data_label )
+    # print('Saved data file to: '+ save_path)
     
     return mnist_data_event, data_feature, data_label
     

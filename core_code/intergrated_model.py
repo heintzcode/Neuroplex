@@ -1,17 +1,17 @@
-import keras
-from keras import backend as K
-from keras.layers import Lambda
-from keras.engine.input_layer import Input
-from keras.models import Sequential
-from keras.layers import Conv2D, MaxPooling2D, LSTM, Dense, Dropout, Flatten
-from keras.layers.core import Activation
-from keras.models import Sequential
-from keras.optimizers import SGD, Adam
-from keras.layers import LeakyReLU
-from keras.models import Model
-from keras.layers import concatenate
-from keras.layers import Reshape
 import tensorflow as tf
+# from keras import backend as K
+# from keras.layers import Lambda
+#from keras.engine.input_layer import Input
+# from keras.models import Sequential
+# from keras.layers import Conv2D, MaxPooling2D, LSTM, Dense, Dropout, Flatten
+# from keras.layers.core import Activation
+# from keras.models import Sequential
+# from keras.optimizers import SGD, Adam
+# from keras.layers import LeakyReLU
+# from keras.models import Model
+# from keras.layers import concatenate
+#from keras.layers import Reshape
+
 
 def intergrated_model(lenetModel, neuralLogic_model, 
                       window_size, num_event_type,
@@ -19,7 +19,7 @@ def intergrated_model(lenetModel, neuralLogic_model,
                       load_nl_weights = True,
                       nl_trainable = False,
                       loss = 'mse_loss',
-                      diagnose = False):
+                      diagnose = True):
     """
     generate an intergrated model using lenetmodel + neurallogic model(trained)
     input:
@@ -34,31 +34,32 @@ def intergrated_model(lenetModel, neuralLogic_model,
     
     
     # Define final model
-    input_layer = Input( shape=(window_size, 28, 28, 1) )
-    split = Lambda( lambda x: tf.split(x, num_or_size_splits= window_size,axis=1))(input_layer)
-    input_split = [Reshape((28,28,1))(i) for i in split]
+    # input_layer = keras.engine.input_layer.Input( shape=(window_size, 28, 28, 1) )
+    input_layer = tf.keras.layers.Input(shape=(window_size, 28, 28))  # removed the last dimension due to change in how the train data is arranged
+    split = tf.keras.layers.Lambda( lambda x: tf.split(x, num_or_size_splits= window_size,axis=1))(input_layer)
+    input_split = [tf.keras.layers.Reshape((28,28,1))(i) for i in split]
     lenet_out = []
     for i in range(window_size):
         lenet_out.append( lenetModel( input_split[i] ) )
-    cont_result = concatenate(lenet_out, axis=-1)
-    reshape_result = Reshape(( -1, num_event_type), name = 'lenet_output' )(cont_result)
+    cont_result = tf.keras.layers.concatenate(lenet_out, axis=-1)
+    reshape_result = tf.keras.layers.Reshape(( -1, num_event_type), name = 'lenet_output' )(cont_result)
     
     ################# adding neural logic model here #############
     num_classes = neuralLogic_model.output.shape[1]
     num_hidden_lstm = 64
     _, win_len, dim = neuralLogic_model.input.shape
     
-    lstm1 = LSTM(num_hidden_lstm, 
+    lstm1 = tf.keras.layers.LSTM(num_hidden_lstm, 
                input_shape=(win_len, dim), 
                return_sequences=False)(reshape_result)
-    dense1 = Dense(num_classes, activation='linear')(lstm1)
+    dense1 = tf.keras.layers.Dense(num_classes, activation='linear')(lstm1)
     
 #     neuralloigc_out = neuralLogic_model(reshape_result)
 #     model = Model(inputs=input_layer, outputs=neuralloigc_out)
     ############ NL model finish #############
     
-    new_model = Model(inputs=input_layer, outputs=dense1)
-    new_model.name="Final_Model"
+    new_model = tf.keras.models.Model(inputs=input_layer, outputs=dense1, name="integrated")
+#     new_model.name="Final_Model"
 
     # model.summary()
     print('Model input: ', new_model.input)
@@ -101,13 +102,16 @@ def intergrated_model(lenetModel, neuralLogic_model,
     
     # loss from ICML paper
     def combined_loss(input_tensor, omega_value):
+        """
+        Keras does not like this combined loss method! Something is wrong with one of the layers, it is intermediate or something
+        """
         def custom_loss(y_true, y_pred):
             omega = omega_value
-            mse_loss = keras.losses.mean_squared_error(y_true, y_pred)
+            mse_loss = tf.keras.losses.mean_squared_error(y_true, y_pred)
             
-            t_vec = input_tensor/(1-input_tensor + K.epsilon()) 
-            t_prod = K.expand_dims( K.prod(1-input_tensor + K.epsilon() , axis = 2), axis = 2 )
-            logic_loss = K.sum( K.sum( t_vec * t_prod, axis =2), axis = 1)
+            t_vec = input_tensor/(1-input_tensor + tf.keras.backend.epsilon()) 
+            t_prod = tf.keras.backend.expand_dims( tf.keras.backend.prod(1-input_tensor + tf.keras.backend.epsilon() , axis = 2), axis = 2 )
+            logic_loss = tf.keras.backend.sum( tf.keras.backend.sum( t_vec * t_prod, axis =2), axis = 1)
 
             new_loss = omega*logic_loss + (1-omega)*mse_loss
             return new_loss
@@ -126,7 +130,7 @@ def intergrated_model(lenetModel, neuralLogic_model,
         print('Loss function not supported!')
     
     # Compile the model
-    new_model.compile(optimizer=Adam(lr = 0.001),  # originally use SGD(lr = 0.0001)
+    new_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate = 0.001),  # originally use SGD(lr = 0.0001)
                   loss = model_loss,
                   metrics=['MAE'])
     
